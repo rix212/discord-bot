@@ -272,7 +272,12 @@ def update_user_stats(member: discord.Member, infraction_type: str, punishment: 
 
 # ─── FLASK DASHBOARD ──────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder="dashboard")
-CORS(app)
+CORS(app, origins=[
+    "http://localhost:5000",
+    "http://127.0.0.1:5500",
+    "https://*.netlify.app",   # your Netlify domain
+    "https://*.up.railway.app", # Railway itself
+])
 
 @app.route("/api/logs")
 def get_logs():
@@ -642,7 +647,7 @@ async def on_ready():
     print(f"✅ Immune users: {IMMUNE_USER_IDS}")
     print("✅ @everyone and @here blocking active.")
     print("✅ Dashboard running on http://localhost:5000")
-    await bot.change_presence(activity=discord.Game(name="jimmys girlfriend"))
+    await bot.change_presence(activity=discord.Game(name="67 67 67 67"))
 
 async def handle_dm(message: discord.Message):
     """Check DMs against all blacklists and log violations to the log channel."""
@@ -739,7 +744,7 @@ async def on_message(message: discord.Message):
 
     # Ping-Reply
     if bot.user.mentioned_in(message) and not message.mention_everyone:
-        await message.channel.send("")
+        await message.channel.send("67")
         return
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
@@ -792,6 +797,38 @@ async def on_message(message: discord.Message):
             save_data()
             await message.channel.send(f"✅ User `{wid}` has been **whitelisted** — they can now use blocked words freely.")
             add_log("✅ Whitelist Add", str(member), member.id, message.channel.name, f"Whitelisted user {wid}")
+            return
+
+        # ── .untimeout @user / userid ────────────────────────────────────────
+        if content.startswith(".untimeout"):
+            target = message.mentions[0] if message.mentions else None
+            if not target:
+                parts = content.split()
+                if len(parts) > 1:
+                    try:
+                        target = message.guild.get_member(int(parts[1]))
+                    except ValueError:
+                        pass
+            if target is None:
+                await message.channel.send("❌ Usage: `.untimeout @user` or `.untimeout <user_id>`")
+                return
+            if target.id in IMMUNE_USER_IDS:
+                await message.channel.send("❌ Cannot untimeout an immune user.")
+                return
+            try:
+                await target.timeout(None, reason=f"Timeout removed by {member}")
+                await message.channel.send(f"✅ **{target}** has been un-timed out.")
+                add_log("✅ Timeout Removed", str(member), member.id, message.channel.name, f"Removed timeout from {target}")
+                log_channel = message.guild.get_channel(CONFIG["log_channel_id"])
+                if log_channel:
+                    embed = discord.Embed(title="✅ Timeout Removed", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+                    embed.add_field(name="Removed by", value=f"{member.mention} ({member})", inline=True)
+                    embed.add_field(name="Target",     value=f"{target.mention} ({target})", inline=True)
+                    await log_channel.send(embed=embed)
+            except discord.Forbidden:
+                await message.channel.send("❌ Bot does not have permission to remove this timeout.")
+            except discord.HTTPException as e:
+                await message.channel.send(f"❌ Error: {e}")
             return
 
         # ── .kick @user [reason] ──────────────────────────────────────────────
