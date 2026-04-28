@@ -17,7 +17,6 @@ SERVER_NAME = "Ambitious Notifier"
 
 # ── BOT SETTINGS (editable via dashboard) ─────────────────────────────────────
 BOT_SETTINGS = {
-    "autoreply": "67",
     "status": "67 67 67 67",
 }
 BLACKLIST_ROLE_ID = 1494380951567073451
@@ -341,6 +340,60 @@ def send_message():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/nick/user", methods=["POST"])
+def set_user_nick():
+    from flask import request as freq
+    import asyncio
+    data       = freq.get_json(force=True)
+    user_id    = data.get("user_id")
+    nick       = data.get("nick", "").strip()
+    guild_id   = data.get("guild_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "Missing user_id"}), 400
+    async def do_nick():
+        for guild in bot.guilds:
+            if guild_id and str(guild.id) != str(guild_id):
+                continue
+            member = guild.get_member(int(user_id))
+            if member:
+                await member.edit(nick=nick or None)
+                return True
+        return False
+    future = asyncio.run_coroutine_threadsafe(do_nick(), bot.loop)
+    try:
+        ok = future.result(timeout=10)
+        if ok:
+            add_log("✏️ Nick Changed (User)", "Dashboard", 0, "–", f"User {user_id} → '{nick}'")
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": "User not found in any guild"}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/nick/bot", methods=["POST"])
+def set_bot_nick():
+    from flask import request as freq
+    import asyncio
+    data     = freq.get_json(force=True)
+    nick     = data.get("nick", "").strip()
+    guild_id = data.get("guild_id")
+    async def do_nick():
+        for guild in bot.guilds:
+            if guild_id and str(guild.id) != str(guild_id):
+                continue
+            await guild.me.edit(nick=nick or None)
+        return True
+    future = asyncio.run_coroutine_threadsafe(do_nick(), bot.loop)
+    try:
+        future.result(timeout=10)
+        add_log("✏️ Nick Changed (Bot)", "Dashboard", 0, "–", f"Bot nick → '{nick}'")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/guilds")
+def get_guilds():
+    return jsonify([{"id": str(g.id), "name": g.name} for g in bot.guilds])
+
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     return jsonify(BOT_SETTINGS)
@@ -351,11 +404,6 @@ def update_settings():
     import asyncio
     data = freq.get_json(force=True)
     changed = False
-    if "autoreply" in data:
-        val = str(data["autoreply"]).strip()
-        if val:
-            BOT_SETTINGS["autoreply"] = val
-            changed = True
     if "status" in data:
         val = str(data["status"]).strip()
         if val:
@@ -775,10 +823,7 @@ async def on_message(message: discord.Message):
     member = message.author
     content = message.content
 
-    # Ping-Reply
-    if bot.user.mentioned_in(message) and not message.mention_everyone:
-        await message.channel.send(BOT_SETTINGS["autoreply"])
-        return
+
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
     if is_immune(member):
