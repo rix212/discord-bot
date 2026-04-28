@@ -642,7 +642,7 @@ async def on_ready():
     print(f"✅ Immune users: {IMMUNE_USER_IDS}")
     print("✅ @everyone and @here blocking active.")
     print("✅ Dashboard running on http://localhost:5000")
-    await bot.change_presence(activity=discord.Game(name="67 67 67 67"))
+    await bot.change_presence(activity=discord.Game(name="jimmys girlfriend"))
 
 async def handle_dm(message: discord.Message):
     """Check DMs against all blacklists and log violations to the log channel."""
@@ -739,7 +739,7 @@ async def on_message(message: discord.Message):
 
     # Ping-Reply
     if bot.user.mentioned_in(message) and not message.mention_everyone:
-        await message.channel.send("67")
+        await message.channel.send("")
         return
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
