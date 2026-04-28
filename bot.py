@@ -14,6 +14,12 @@ from flask_cors import CORS
 TOKEN = os.getenv("DISCORD_TOKEN", "")
 
 SERVER_NAME = "Ambitious Notifier"
+
+# ── BOT SETTINGS (editable via dashboard) ─────────────────────────────────────
+BOT_SETTINGS = {
+    "autoreply": "67",
+    "status": "67 67 67 67",
+}
 BLACKLIST_ROLE_ID = 1494380951567073451
 
 # ── IMMUNE USER — completely exempt from ALL checks including GIFs ────────────
@@ -194,6 +200,8 @@ def load_data():
         for p in data.get("custom_phrases", []):
             if p not in BLOCKED_PHRASES:
                 BLOCKED_PHRASES.append(p)
+        saved_settings = data.get("bot_settings", {})
+        BOT_SETTINGS.update(saved_settings)
         print(f"✅ Loaded {len(dashboard_logs)} logs, {len(user_stats)} users, {len(WHITELISTED_USER_IDS)} whitelisted from disk.")
     except Exception as e:
         print(f"⚠️ Could not load {DATA_FILE}: {e}")
@@ -208,6 +216,7 @@ def save_data():
                 "whitelist":      list(WHITELISTED_USER_IDS),
                 "custom_words":   BLOCKED_WORDS[:],
                 "custom_phrases": BLOCKED_PHRASES[:],
+                "bot_settings":   BOT_SETTINGS.copy(),
                 "users": {
                     uid: {**u, "gif_warnings": gif_warnings.get(int(uid), 0)}
                     for uid, u in user_stats.items()
@@ -331,6 +340,35 @@ def send_message():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/settings", methods=["GET"])
+def get_settings():
+    return jsonify(BOT_SETTINGS)
+
+@app.route("/api/settings", methods=["POST"])
+def update_settings():
+    from flask import request as freq
+    import asyncio
+    data = freq.get_json(force=True)
+    changed = False
+    if "autoreply" in data:
+        val = str(data["autoreply"]).strip()
+        if val:
+            BOT_SETTINGS["autoreply"] = val
+            changed = True
+    if "status" in data:
+        val = str(data["status"]).strip()
+        if val:
+            BOT_SETTINGS["status"] = val
+            # Update bot presence live
+            async def update_presence():
+                await bot.change_presence(activity=discord.Game(name=val))
+            asyncio.run_coroutine_threadsafe(update_presence(), bot.loop)
+            changed = True
+    if changed:
+        save_data()
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "No valid fields provided"}), 400
 
 @app.route("/api/blacklist", methods=["GET"])
 def get_blacklist():
@@ -642,7 +680,7 @@ async def on_ready():
     print(f"✅ Immune users: {IMMUNE_USER_IDS}")
     print("✅ @everyone and @here blocking active.")
     print("✅ Dashboard running on http://localhost:5000")
-    await bot.change_presence(activity=discord.Game(name="jimmys girlfriend"))
+    await bot.change_presence(activity=discord.Game(name=BOT_SETTINGS["status"]))
 
 async def handle_dm(message: discord.Message):
     """Check DMs against all blacklists and log violations to the log channel."""
@@ -739,7 +777,7 @@ async def on_message(message: discord.Message):
 
     # Ping-Reply
     if bot.user.mentioned_in(message) and not message.mention_everyone:
-        await message.channel.send("")
+        await message.channel.send(BOT_SETTINGS["autoreply"])
         return
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
