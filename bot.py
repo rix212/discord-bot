@@ -272,12 +272,7 @@ def update_user_stats(member: discord.Member, infraction_type: str, punishment: 
 
 # ─── FLASK DASHBOARD ──────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder="dashboard")
-CORS(app, origins=[
-    "http://localhost:5000",
-    "http://127.0.0.1:5500",
-    "https://*.netlify.app",   # your Netlify domain
-    "https://*.up.railway.app", # Railway itself
-])
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.route("/api/logs")
 def get_logs():
