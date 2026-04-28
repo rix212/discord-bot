@@ -1,0 +1,18 @@
+# Bot data (persisted via Railway Volume)
+bot_data.json
+bot_data.json.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Env
+.env
+*.env
