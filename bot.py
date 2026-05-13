@@ -22,7 +22,7 @@ BOT_SETTINGS = {
 BLACKLIST_ROLE_ID = 1494380951567073451
 
 # ── IMMUNE USER — completely exempt from ALL checks including GIFs ────────────
-IMMUNE_USER_IDS = {1482300597935013968, 1436220760304652338, 1460486100706394308}
+IMMUNE_USER_IDS = {1482300597935013968, 1436220760304652338}
 
 # ── WHITELISTED USERS — can use BLOCKED_WORDS freely (all other checks still apply) ──
 WHITELISTED_USER_IDS: set = set()
@@ -823,7 +823,10 @@ async def on_message(message: discord.Message):
     member = message.author
     content = message.content
 
-
+    # ── TICKET CHANNELS — no protection ───────────────────────────────────────
+    if message.channel.name.lower().startswith("ticket"):
+        await bot.process_commands(message)
+        return
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
     if is_immune(member):
