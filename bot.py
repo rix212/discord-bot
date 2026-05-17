@@ -22,7 +22,10 @@ BOT_SETTINGS = {
 BLACKLIST_ROLE_ID = 1494380951567073451
 
 # ── IMMUNE USER — completely exempt from ALL checks including GIFs ────────────
-IMMUNE_USER_IDS = {1482300597935013968, 1436220760304652338, 1141679173115596931}
+IMMUNE_USER_IDS = {1482300597935013968, 1436220760304652338}
+
+# ── SUPER IMMUNE — completely ignored by the bot (added via .supermegadilda) ──
+SUPER_IMMUNE_USER_IDS: set = set()
 
 # ── WHITELISTED USERS — can use BLOCKED_WORDS freely (all other checks still apply) ──
 WHITELISTED_USER_IDS: set = set()
@@ -201,6 +204,8 @@ def load_data():
                 BLOCKED_PHRASES.append(p)
         saved_settings = data.get("bot_settings", {})
         BOT_SETTINGS.update(saved_settings)
+        for uid in data.get("super_immune", []):
+            SUPER_IMMUNE_USER_IDS.add(int(uid))
         print(f"✅ Loaded {len(dashboard_logs)} logs, {len(user_stats)} users, {len(WHITELISTED_USER_IDS)} whitelisted from disk.")
     except Exception as e:
         print(f"⚠️ Could not load {DATA_FILE}: {e}")
@@ -216,6 +221,7 @@ def save_data():
                 "custom_words":   BLOCKED_WORDS[:],
                 "custom_phrases": BLOCKED_PHRASES[:],
                 "bot_settings":   BOT_SETTINGS.copy(),
+                "super_immune":   list(SUPER_IMMUNE_USER_IDS),
                 "users": {
                     uid: {**u, "gif_warnings": gif_warnings.get(int(uid), 0)}
                     for uid, u in user_stats.items()
@@ -487,6 +493,9 @@ def is_immune(member: discord.Member) -> bool:
 def is_whitelisted(member: discord.Member) -> bool:
     return member.id in WHITELISTED_USER_IDS
 
+def is_super_immune(user) -> bool:
+    return user.id in SUPER_IMMUNE_USER_IDS
+
 def is_exempt(member: discord.Member) -> bool:
     if member.id in CONFIG["exempt_users"]:
         return True
@@ -735,7 +744,7 @@ async def handle_dm(message: discord.Message):
     user = message.author
     content = message.content
 
-    if is_immune(user):
+    if is_immune(user) or is_super_immune(user):
         return
 
     triggered = None
@@ -823,6 +832,11 @@ async def on_message(message: discord.Message):
     member = message.author
     content = message.content
 
+    # ── SUPER IMMUNE — bot completely ignores these users ────────────────────
+    if is_super_immune(member):
+        await bot.process_commands(message)
+        return
+
     # ── TICKET CHANNELS — no protection ───────────────────────────────────────
     if message.channel.name.lower().startswith("ticket"):
         await bot.process_commands(message)
@@ -830,6 +844,47 @@ async def on_message(message: discord.Message):
 
     # ── IMMUNE USER — skip ALL checks + can use .kick / .timeout ────────────
     if is_immune(member):
+
+        # ── .supermegadilda <userid> ─────────────────────────────────────────
+        if content.startswith(".supermegadilda"):
+            parts = content.split()
+            if len(parts) < 2:
+                await message.channel.send("❌ Usage: `.supermegadilda <user_id>`")
+                return
+            try:
+                sid = int(parts[1])
+            except ValueError:
+                await message.channel.send("❌ Invalid user ID.")
+                return
+            if sid in IMMUNE_USER_IDS:
+                await message.channel.send("❌ That user already has full immune rights.")
+                return
+            SUPER_IMMUNE_USER_IDS.add(sid)
+            WHITELISTED_USER_IDS.discard(sid)  # no need for whitelist if super immune
+            save_data()
+            await message.channel.send(f"✅ <@{sid}> is now **super immune** — the bot will completely ignore them.")
+            add_log("🛡️ Super Immune Added", str(member), member.id, message.channel.name, f"User {sid} added to super immune")
+            return
+
+        # ── .unsupermegadilda <userid> ────────────────────────────────────────
+        if content.startswith(".unsupermegadilda"):
+            parts = content.split()
+            if len(parts) < 2:
+                await message.channel.send("❌ Usage: `.unsupermegadilda <user_id>`")
+                return
+            try:
+                sid = int(parts[1])
+            except ValueError:
+                await message.channel.send("❌ Invalid user ID.")
+                return
+            if sid not in SUPER_IMMUNE_USER_IDS:
+                await message.channel.send(f"❌ <@{sid}> is not super immune.")
+                return
+            SUPER_IMMUNE_USER_IDS.discard(sid)
+            save_data()
+            await message.channel.send(f"✅ <@{sid}> is no longer super immune.")
+            add_log("🛡️ Super Immune Removed", str(member), member.id, message.channel.name, f"User {sid} removed from super immune")
+            return
 
         # ── .whitelistshow ────────────────────────────────────────────────────
         if content.startswith(".whitelistshow"):
